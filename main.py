@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 from pathlib import Path
+import os
 
 
 
@@ -71,28 +72,23 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    # Tenta primeiro o arquivo principal; se não existir, usa o alternativo
-    base_path = Path(r"C:\Users\guest\Desktop\InsuranceDash")
-    csv_path = base_path / "insurance.csv"
-    if not csv_path.exists():
-        csv_path = base_path / "isurance_dash.csv"
+    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+    csv_path = os.path.join(diretorio_atual, "insurance.csv")
 
-    
-    df = pd.read_csv(csv_path, sep=None, engine="python")
-    
-    # Conversão de datas
-     
-    df['Date_start_contract'] = pd.to_datetime(df['Date_start_contract'], errors='coerce', dayfirst=True)
-    df['Date_birth'] = pd.to_datetime(df['Date_birth'], errors='coerce', dayfirst=True)
-    df['Date_last_renewal'] = pd.to_datetime(df['Date_last_renewal'], errors='coerce', dayfirst=True)
-    df['Date_next_renewal'] = pd.to_datetime(df['Date_next_renewal'], errors='coerce', dayfirst=True)
+    if not os.path.exists(csv_path):
+        st.error(f"Erro: O arquivo {csv_path} não foi encontrado no repositório!")
+        st.stop()
 
-    current_year = datetime.now().year
-    df["idade"] = current_year - df["Date_birth"].dt.year
-    
-    return df
+    return pd.read_csv(csv_path, sep=";")
+
 
 df = load_data()
+    
+df['Date_start_contract'] = pd.to_datetime(df['Date_start_contract'], dayfirst=True)
+df['Date_birth'] = pd.to_datetime(df['Date_birth'], dayfirst=True)
+df['idade'] = 2026 - df['Date_birth'].dt.year
+    
+    
 
 # --- SIDEBAR (Filtros) ---
 st.sidebar.header("Filtros")
