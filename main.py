@@ -88,8 +88,26 @@ def load_data():
         st.write("Arquivos que ele achou na pasta:", os.listdir(base_path))
         return pd.DataFrame()
 
-    # 4. Carrega o arquivo com o separador correto (;)
-    df = pd.read_csv(csv_path, sep=';')
+    # 4. Carrega o CSV detectando automaticamente o delimitador
+    # (funciona para ',' e ';')
+    df = pd.read_csv(csv_path, sep=None, engine="python")
+    df.columns = df.columns.str.strip()
+
+    required_columns = [
+        "Date_start_contract",
+        "Date_birth",
+        "Date_last_renewal",
+        "Date_next_renewal",
+        "Area",
+        "Type_risk",
+        "Premium",
+        "Cost_claims_year",
+    ]
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        st.error(f"Colunas obrigatórias ausentes no CSV: {', '.join(missing_columns)}")
+        st.write("Colunas encontradas:", list(df.columns))
+        st.stop()
     
     # Conversão de datas
     df['Date_start_contract'] = pd.to_datetime(df['Date_start_contract'], errors='coerce', dayfirst=True)
