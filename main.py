@@ -8,7 +8,6 @@ import os
 
 
 
-
 # Configuração da página
 st.set_page_config(
     page_title="Insurance Analytics",
@@ -72,23 +71,38 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(diretorio_atual, "insurance.csv")
+    # 1. Pega o caminho da pasta onde o main.py está rodando
+    # Isso funciona tanto no seu Windows quanto no servidor do Streamlit
+    base_path = Path(__file__).parent 
+    
+    # 2. O nome EXATO do arquivo que está no seu GitHub
+    # No seu log apareceu 'insurance.csv', mas o arquivo real é 'insurancedata.csv'
+    nome_arquivo = "insurancedata.csv"
+    
+    csv_path = base_path / nome_arquivo
+    
+    # 3. Verificação de segurança: se não achar o arquivo, ele te avisa o porquê
+    if not csv_path.exists():
+        st.error(f"Arquivo não encontrado: {nome_arquivo}")
+        st.write(f"O Python procurou em: {csv_path}")
+        st.write("Arquivos que ele achou na pasta:", os.listdir(base_path))
+        return pd.DataFrame()
 
-    if not os.path.exists(csv_path):
-        st.error(f"Erro: O arquivo {csv_path} não foi encontrado no repositório!")
-        st.stop()
+    # 4. Carrega o arquivo com o separador correto (;)
+    df = pd.read_csv(csv_path, sep=';')
+    
+    # Conversão de datas
+    df['Date_start_contract'] = pd.to_datetime(df['Date_start_contract'], errors='coerce', dayfirst=True)
+    df['Date_birth'] = pd.to_datetime(df['Date_birth'], errors='coerce', dayfirst=True)
+    df['Date_last_renewal'] = pd.to_datetime(df['Date_last_renewal'], errors='coerce', dayfirst=True)
+    df['Date_next_renewal'] = pd.to_datetime(df['Date_next_renewal'], errors='coerce', dayfirst=True)
 
-    return pd.read_csv(csv_path, sep=";")
-
+    current_year = datetime.now().year
+    df["idade"] = current_year - df["Date_birth"].dt.year
+    
+    return df
 
 df = load_data()
-    
-df['Date_start_contract'] = pd.to_datetime(df['Date_start_contract'], dayfirst=True)
-df['Date_birth'] = pd.to_datetime(df['Date_birth'], dayfirst=True)
-df['idade'] = 2026 - df['Date_birth'].dt.year
-    
-    
 
 # --- SIDEBAR (Filtros) ---
 st.sidebar.header("Filtros")
