@@ -19,7 +19,7 @@ st.set_page_config(
 st.markdown("""
     <h1 style='text-align: center;'>Insurance Analytics</h1>
     """, unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center;'>1981 - 2018</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center;'>2008 - 2018</h3>", unsafe_allow_html=True)
 
 # Estilização Base (Dark Mode e Cyano)
 st.markdown("""
@@ -90,7 +90,7 @@ def load_data():
 
     # 4. Carrega o CSV detectando automaticamente o delimitador
     # (funciona para ',' e ';')
-    df = pd.read_csv(csv_path, sep=None, engine="python")
+    df = pd.read_csv(csv_path, sep=',', engine="python")
     df.columns = df.columns.str.strip()
 
     required_columns = [
@@ -105,7 +105,7 @@ def load_data():
     ]
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
-        st.error(f"Colunas obrigatórias ausentes no CSV: {', '.join(missing_columns)}")
+        st.error(f"Colunas obrigatórias ausentes no CSV: {','.join(missing_columns)}")
         st.write("Colunas encontradas:", list(df.columns))
         st.stop()
     
@@ -116,7 +116,7 @@ def load_data():
     df['Date_next_renewal'] = pd.to_datetime(df['Date_next_renewal'], errors='coerce', dayfirst=True)
 
     current_year = datetime.now().year
-    df["idade"] = current_year - df["Date_birth"].dt.year
+    df["idade"] = (current_year - df["Date_birth"].dt.year).fillna(0).astype(int)
     
     return df
 
@@ -185,6 +185,18 @@ def format_compacto(valor: float) -> str:
     # 2 casas + troca ponto por vírgula
     return f"{numero:,.2f}{sufixo}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+
+def fmt_br_decimal(valor: float, casas: int = 2) -> str:
+    """Formata número com vírgula decimal (ex.: 139,09)."""
+    fmt = f"{{:,.{casas}f}}"
+    s = fmt.format(valor)
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+# Cor dos rótulos alinhada ao tema do app (fundos claros nos traços / fatias)
+LABEL_ESCURO = "#0e1117"
+LABEL_CYAN_PADRAO = "#00f2ea"
+
 # Métricas Principais (Top Cards)
 ticket_medio = df_selection["Premium"].mean()
 total_claims = df_selection["Cost_claims_year"].sum()
@@ -248,10 +260,19 @@ left_column, right_column = st.columns(2)
 
 # Gráfico 1: Ticket Médio por Tipo de Risco 
 with left_column:
-    st.subheader("Ticket Médio p/Tipo de Risco")
-    avg_premium_risk = (
-        df_selection.groupby(by=["Type_risk"]).mean(numeric_only=True)[["Premium"]].sort_values(by="Premium")
-    )
+    st.subheader("Ticket Médio por Tipo de Risco")
+    grp_risk = df_selection.groupby("Type_risk", sort=False)
+    avg_premium_risk = grp_risk.mean(numeric_only=True)[["Premium"]].sort_values(by="Premium")
+    if "N_claims_year" in df_selection.columns:
+        sinistros_por_risco = grp_risk["N_claims_year"].sum()
+    else:
+        sinistros_por_risco = (
+            df_selection.assign(_c=(df_selection["Cost_claims_year"] > 0))
+            .groupby("Type_risk", sort=False)["_c"]
+            .sum()
+        )
+    sinistros_por_risco = sinistros_por_risco.reindex(avg_premium_risk.index, fill_value=0)
+
     fig_premium = px.bar(
         avg_premium_risk,
         x=avg_premium_risk.index,
@@ -260,12 +281,38 @@ with left_column:
         color_discrete_sequence=["#00f2ea"] * len(avg_premium_risk),
         template="plotly_dark"
     )
-    fig_premium.update_layout(plot_bgcolor="rgba(0,0,0,0)", yaxis=(dict(showgrid=False)))
+    fig_premium.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(showgrid=False),
+        margin=dict(t=48),
+    )
+    tick_labels_fmt = [f"$ {fmt_br_decimal(v)}" for v in avg_premium_risk["Premium"]]
+    fig_premium.update_traces(
+        text=tick_labels_fmt,
+        textposition="inside",
+        insidetextanchor="middle",
+        textfont=dict(color=LABEL_ESCURO, size=25),
+        cliponaxis=False,
+    )
+    for xrisk, ybar, n_sin in zip(
+        avg_premium_risk.index,
+        avg_premium_risk["Premium"],
+        sinistros_por_risco,
+    ):
+        fig_premium.add_annotation(
+            x=xrisk,
+            y=ybar,
+            text=str(int(n_sin)),
+            showarrow=False,
+            yshift=14,
+            font=dict(color=LABEL_CYAN_PADRAO, size=20),
+            yanchor="bottom",
+        )
     st.plotly_chart(fig_premium, use_container_width=True)
 
 # Gráfico 2: Distribuição de Sinistros por Área
 with right_column:
-    st.subheader("Distribuição de Custos p/Área")
+    st.subheader("Distribuição de Custos por Área")
     fig_claims = px.pie(
         df_selection,
         values='Cost_claims_year',
@@ -274,12 +321,18 @@ with right_column:
         color_discrete_sequence=["#00f2ea"],
         template="plotly_dark"
     )
+    fig_claims.update_traces(
+        textposition="inside",
+        textinfo="percent+label",
+        textfont=dict(size=27, color=LABEL_ESCURO),
+        insidetextorientation="horizontal",
+    )
     st.plotly_chart(fig_claims, use_container_width=True)
 
 st.markdown("---")
 
 # Gráfico 3: Idade Média por Tipo de Risco
-st.subheader("Perfil de Idade p/Segmento de Risco")
+st.subheader("Perfil de Idade por Segmento de Risco")
 age_risk = df_selection.groupby("Type_risk")["idade"].mean().reset_index()
 fig_age = px.line(
     age_risk,
@@ -292,6 +345,14 @@ fig_age = px.line(
 
 
 fig_age.update_layout(yaxis_title="Idade Média")
+idade_labels = [fmt_br_decimal(v, 1) for v in age_risk["idade"]]
+fig_age.update_traces(
+    mode="lines+markers+text",
+    text=idade_labels,
+    textposition="top center",
+    textfont=dict(color=LABEL_CYAN_PADRAO, size=50),
+    cliponaxis=False,
+)
 st.plotly_chart(fig_age, use_container_width=True)
 
 # Gráfico 4: Ponto de Equilíbrio da Carteira (Sinistralidade)
