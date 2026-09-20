@@ -15,11 +15,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-#Centralização do titulo
+# Centralização do titulo
 st.markdown("""
     <h1 style='text-align: center;'>Insurance Analytics</h1>
     """, unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center;'>2008 - 2018</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center;'>1981 | 2018</h3>", unsafe_allow_html=True)
 
 # Estilização Base (Dark Mode e Cyano)
 st.markdown("""
@@ -71,25 +71,20 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    # 1. Pega o caminho da pasta onde o main.py está rodando
-    # Isso funciona tanto no seu Windows quanto no servidor do Streamlit
+
     base_path = Path(__file__).parent 
     
-    # 2. O nome EXATO do arquivo que está no seu GitHub
-    # No seu log apareceu 'insurance.csv', mas o arquivo real é 'insurancedata.csv'
     nome_arquivo = "insurancedata.csv"
     
     csv_path = base_path / nome_arquivo
     
-    # 3. Verificação de segurança: se não achar o arquivo, ele te avisa o porquê
     if not csv_path.exists():
         st.error(f"Arquivo não encontrado: {nome_arquivo}")
         st.write(f"O Python procurou em: {csv_path}")
         st.write("Arquivos que ele achou na pasta:", os.listdir(base_path))
         return pd.DataFrame()
 
-    # 4. Carrega o CSV detectando automaticamente o delimitador
-    # (funciona para ',' e ';')
+    # 4. CSV 
     df = pd.read_csv(csv_path, sep=',', engine="python")
     df.columns = df.columns.str.strip()
 
@@ -165,7 +160,7 @@ df_selection = df.loc[mask]
 # --- MAIN PAGE ---
 st.markdown("##")
 
-#DEF PARA UNIDADE DE MEDIDA $
+# UNIDADE DE MEDIDA $
 def format_compacto(valor: float) -> str:
     abs_valor = abs(valor)
 
@@ -182,7 +177,6 @@ def format_compacto(valor: float) -> str:
         numero = valor
         sufixo = ""
 
-    # 2 casas + troca ponto por vírgula
     return f"{numero:,.2f}{sufixo}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
@@ -197,7 +191,10 @@ def fmt_br_decimal(valor: float, casas: int = 2) -> str:
 LABEL_ESCURO = "#0e1117"
 LABEL_CYAN_PADRAO = "#00f2ea"
 
-# Métricas Principais (Top Cards)
+#===========================================
+#                   CARDS
+#===========================================
+
 ticket_medio = df_selection["Premium"].mean()
 total_claims = df_selection["Cost_claims_year"].sum()
 avg_age = df_selection["idade"].mean()
@@ -232,8 +229,11 @@ with col5:
 
 st.markdown("---")
 
-col1, col2, col3 = st.columns([1, 1, 1]) # [largura_esq, largura_grafico, largura_dir]
 
+col1, col2, col3 = st.columns([1, 1, 1]) 
+#===========================================
+#                   TIPOS DE RISCO
+#===========================================
 with col1:
     st.markdown("### Tipos de risco")
     st.write("`1` → Moto")
@@ -243,7 +243,6 @@ with col1:
 
 with col2:
     st.write(' ')
-    # Exemplo: st.line_chart(data)
 
 with col3:
     st.markdown("### Tipos de Área")
@@ -432,4 +431,116 @@ if not sin_df.empty:
     st.caption(tendencia_txt)
 else:
     st.info("Sem dados suficientes no período selecionado para calcular a sinistralidade mensal.")
+
+# Gráfico 5: Boxplots (Premium, Cost_claims_year, avg_age, n_apolices)
+st.markdown("---")
+st.subheader("Boxplot - Faturamento | Idade | Apolices")
+
+
+def _box_stats(s: pd.Series) -> dict:
+    s = pd.to_numeric(s, errors="coerce").dropna()
+    if s.empty:
+        return {"min": None, "q1": None, "median": None, "q3": None, "max": None}
+    q1 = float(s.quantile(0.25))
+    median = float(s.quantile(0.50))
+    q3 = float(s.quantile(0.75))
+    return {
+        "min": float(s.min()),
+        "q1": q1,
+        "median": median,
+        "q3": q3,
+        "max": float(s.max()),
+    }
+
+
+def _boxplot_fig(df_: pd.DataFrame, col: str, titulo: str, prefixo: str = "", sufixo: str = "") -> go.Figure:
+    stats = _box_stats(df_[col]) if col in df_.columns else {"min": None, "q1": None, "median": None, "q3": None, "max": None}
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Box(
+            y=pd.to_numeric(df_[col], errors="coerce") if col in df_.columns else pd.Series(dtype="float"),
+            name=titulo,
+            marker=dict(color="#00f2ea"),
+            fillcolor="rgba(0, 242, 234, 0.25)",
+            line=dict(color="#00f2ea", width=2),
+            boxmean="sd",
+            boxpoints=False,
+            hovertemplate=(
+                "<b>%{fullData.name}</b><br>"
+                "Min: %{min}<br>"
+                "Q1: %{q1}<br>"
+                "Mediana (Q2): %{median}<br>"
+                "Q3: %{q3}<br>"
+                "Max: %{max}<extra></extra>"
+            ),
+        )
+    )
+
+    fig.update_layout(
+        template="plotly_dark",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(t=40, r=10, l=10, b=10),
+        showlegend=False,
+        xaxis=dict(visible=False),
+    )
+
+    # Números dentro do gráfico (tamanho médio)
+    if all(v is not None for v in stats.values()):
+        labels = [
+            ("Min", stats["min"]),
+            ("Q1", stats["q1"]),
+            ("Q2", stats["median"]),
+            ("Q3", stats["q3"]),
+            ("Max", stats["max"]),
+        ]
+
+        def _fmt(v: float) -> str:
+            return f"{prefixo}{fmt_br_decimal(float(v))}{sufixo}"
+
+        # Posicionamento: perto da caixa/whiskers, sem "legenda" no topo
+        for nome, yv in labels:
+            fig.add_annotation(
+                xref="paper",
+                yref="y",
+                x=0.06,
+                y=float(yv),
+                text=f"<b>{nome}</b>: {_fmt(float(yv))}",
+                showarrow=False,
+                font=dict(color=LABEL_CYAN_PADRAO, size=15),
+                bgcolor="rgba(14,17,23,0.35)",
+                bordercolor="rgba(0,242,234,0.35)",
+                borderwidth=1,
+                align="left",
+            )
+    else:
+        fig.add_annotation(
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            text="<b>Sem dados suficientes</b>",
+            showarrow=False,
+            font=dict(color="#ffae42", size=14),
+            align="center",
+        )
+
+    return fig
+
+
+df_box = df_selection.copy()
+if "idade" in df_box.columns and "avg_age" not in df_box.columns:
+    df_box["avg_age"] = df_box["idade"]
+if "Policies_in_force" in df_box.columns and "n_apolices" not in df_box.columns:
+    df_box["n_apolices"] = df_box["Policies_in_force"]
+elif "n_apolices" not in df_box.columns:
+    df_box["n_apolices"] = 1
+
+bp1, bp2, bp3 = st.columns(3)
+with bp1:
+    st.plotly_chart(_boxplot_fig(df_box, "Premium", "Premium", prefixo="$ "), use_container_width=True)
+with bp2:
+    st.plotly_chart(_boxplot_fig(df_box, "avg_age", "Idade (anos)", sufixo=" anos"), use_container_width=True)
+with bp3:
+    st.plotly_chart(_boxplot_fig(df_box, "n_apolices", "Nº Apólices (em vigor)"), use_container_width=True)
 
