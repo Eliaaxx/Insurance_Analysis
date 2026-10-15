@@ -5,7 +5,7 @@ Este projeto apresenta um Dashboard interativo desenvolvido em **Streamlit** par
 > **Status do Projeto:** 🚀 Versão 1.0 feita
 
 ## 🔗 Link de Acesso
-(pendente)
+(https://insurancedatadashboard.streamlit.app)
 
 ## 🖼️ Previewb
 <img width="1362" height="766" alt="image" src="https://github.com/user-attachments/assets/72df1da6-af87-41bd-b762-5d625271068d" />
